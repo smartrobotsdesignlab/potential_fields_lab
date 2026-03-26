@@ -1,0 +1,34 @@
+potential_field_1d:
+  ros__parameters:
+    experiment_name: "exp5_challenge"
+    # ============================================================
+    #   STUDENT CHALLENGE
+    # ============================================================
+    #   Goal: make the robot stop exactly at 0.5m from the box
+    #         with NO oscillation and approach speed > 0.1 m/s
+    #         at d = 1.0m
+    #
+    #   Step 1: Calculate theoretical equilibrium distance
+    #           Solve: k_att*(d - goal) = k_rep*(1/d - 1/d0)*(1/d^2)
+    #
+    #   Step 2: Choose k_damp for critical damping
+    #           c_critical = 2 * sqrt(k * m)  where m ~ 3.5 kg (burger)
+    #
+    #   Step 3: Fill in your calculated values below and run
+    #
+    #   Step 4: Measure actual stop distance and calculate error %
+    # ============================================================
+
+    # --- YOUR VALUES HERE ---
+    k_att: 0.0            # Replace with your calculated value
+    goal_distance: 0.5    # Keep this fixed
+    k_rep: 0.0            # Replace with your calculated value
+    influence_radius: 1.5 # Keep this fixed
+    k_damp: 0.0           # Replace with your calculated value
+    # --- Safety (do not change) ---
+    max_speed: 0.3
+    min_distance: 0.25
+
+pf_logger:
+  ros__parameters:
+    experiment_name: "exp5_challenge"

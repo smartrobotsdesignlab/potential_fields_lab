@@ -1,0 +1,18 @@
+potential_field_1d:
+  ros__parameters:
+    experiment_name: "exp1_baseline"
+    # --- Attractive Field ---
+    k_att: 2.0            # Spring constant pulling toward goal
+    goal_distance: 0.5    # Target stop distance from obstacle [m]
+    # --- Repulsive Field ---
+    k_rep: 0.8            # Repulsion strength
+    influence_radius: 1.5 # Distance at which obstacle is felt [m]
+    # --- Damping ---
+    k_damp: 1.5           # Viscous damping coefficient
+    # --- Safety ---
+    max_speed: 0.3        # Maximum speed [m/s]
+    min_distance: 0.25    # Emergency stop distance [m]
+
+pf_logger:
+  ros__parameters:
+    experiment_name: "exp1_baseline"

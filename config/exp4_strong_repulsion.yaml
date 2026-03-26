@@ -1,0 +1,21 @@
+potential_field_1d:
+  ros__parameters:
+    experiment_name: "exp4_strong_repulsion"
+    # --- Attractive Field ---
+    k_att: 2.0
+    goal_distance: 0.5
+    # --- Repulsive Field ---
+    k_rep: 5.0            # VERY STRONG repulsion
+                          # Robot stops far from obstacle
+                          # May even reverse away!
+                          # Watch: equilibrium shifts far from goal_distance
+    influence_radius: 1.5
+    # --- Damping ---
+    k_damp: 1.5
+    # --- Safety ---
+    max_speed: 0.3
+    min_distance: 0.25
+
+pf_logger:
+  ros__parameters:
+    experiment_name: "exp4_strong_repulsion"

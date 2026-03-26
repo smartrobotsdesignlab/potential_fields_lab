@@ -1,0 +1,20 @@
+potential_field_1d:
+  ros__parameters:
+    experiment_name: "exp2_no_damping"
+    # --- Attractive Field ---
+    k_att: 2.0
+    goal_distance: 0.5
+    # --- Repulsive Field ---
+    k_rep: 0.8
+    influence_radius: 1.5
+    # --- Damping ---
+    k_damp: 0.0           # NO DAMPING — robot will oscillate!
+                          # Watch: velocity never settles to zero
+                          # Analogy: spring with no friction
+    # --- Safety ---
+    max_speed: 0.3
+    min_distance: 0.25
+
+pf_logger:
+  ros__parameters:
+    experiment_name: "exp2_no_damping"
