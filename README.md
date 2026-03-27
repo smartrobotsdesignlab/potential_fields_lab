@@ -43,6 +43,13 @@ ros2 launch turtlebot3_bringup robot.launch.py
 **On your Laptop** — run the experiment:
 ```bash
 ros2 launch potential_fields_lab lab.launch.py config:=exp1_baseline
+ros2 launch potential_fields_lab lab.launch.py config:=exp2_no_damping
+ros2 launch potential_fields_lab lab.launch.py config:=exp3_weak_repulsion
+ros2 launch potential_fields_lab lab.launch.py config:=exp3_strong_repulsion
+
+
+
+
 ```
 
 
