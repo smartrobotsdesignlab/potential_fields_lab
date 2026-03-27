@@ -2,16 +2,16 @@ potential_field_1d:
   ros__parameters:
     experiment_name: "exp3_weak_repulsion"
     # --- Attractive Field ---
-    k_att: 3.0 #2.0
+    k_att: 2.0
     goal_distance: 0.5
     # --- Repulsive Field ---
-    k_rep: 0.001 #0.05           # VERY WEAK repulsion
+    k_rep: 0.05           # VERY WEAK repulsion
                           # Robot may not stop before hitting box!
                           # Watch: F_rep never overcomes F_att
                           # Emergency stop should trigger at 0.25m
     influence_radius: 1.5
     # --- Damping ---
-    k_damp: 0.0 #1.5
+    k_damp: 1.5
     # --- Safety ---
     max_speed: 0.2        # Reduced speed for safety
     min_distance: 0.25
