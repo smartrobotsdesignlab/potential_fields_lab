@@ -1,0 +1,4 @@
+fake_diffdrive:
+  ros__parameters:
+    sim_poles: "1.0,0.3; 1.0,-0.3"
+    sim_walls: "-2.6,2.8,-2.4,2.5"

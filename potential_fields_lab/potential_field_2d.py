@@ -4,7 +4,10 @@ Potential Fields 2D — TurtleBot3 Burger + ROS2 Humble
 ============================================================
 Goal-seeking with obstacle avoidance in a 2D vector field.
 
-Obstacles and goal are at KNOWN positions in the odom frame.
+Obstacles come from one of two sources (parameter obstacle_source):
+  yaml   KNOWN positions listed in the scenario file (Session 2)
+  lidar  positions DETECTED live by pole_detector on /pf2d_obstacles
+The field equations are identical in both modes.
 The robot starts at the origin (0,0,0) each run.
 
 The node:
@@ -27,7 +30,7 @@ import numpy as np
 import math
 
 from nav_msgs.msg import Odometry, Path
-from geometry_msgs.msg import Twist, Point, PoseStamped
+from geometry_msgs.msg import Twist, Point, PoseStamped, PoseArray
 from std_msgs.msg import Float32MultiArray, String
 from visualization_msgs.msg import Marker, MarkerArray
 import json
@@ -63,6 +66,11 @@ class PotentialField2D(Node):
         self.declare_parameter('heading_gain',     1.5)   # P-gain on heading
         self.declare_parameter('w_slew',           0.25)  # max change in w per cycle
 
+        # Where obstacles come from: 'yaml' (known list) or 'lidar' (detected)
+        self.declare_parameter('obstacle_source',  'yaml')
+        self.declare_parameter('obstacle_topic',   '/pf2d_obstacles')
+        self.declare_parameter('obstacle_timeout', 1.0)   # s without detections -> warn
+
         # Bookkeeping
         self.declare_parameter('scenario_name',    'scenario')
 
@@ -75,8 +83,17 @@ class PotentialField2D(Node):
             self.get_parameter('goal_y').value])
         self.goal_tol   = self.get_parameter('goal_tolerance').value
 
-        obs_flat        = self.get_parameter('obstacles').value
-        self.obstacles  = np.array(obs_flat, dtype=float).reshape(-1, 2)
+        self.obs_source = str(self.get_parameter('obstacle_source').value).lower()
+        self.obs_timeout= self.get_parameter('obstacle_timeout').value
+        if self.obs_source == 'lidar':
+            # filled live from /pf2d_obstacles; empty until the first detection
+            self.obstacles = np.zeros((0, 2))
+        else:
+            obs_flat       = self.get_parameter('obstacles').value
+            self.obstacles = np.array(obs_flat, dtype=float).reshape(-1, 2)
+        self.obs_odom   = np.zeros((0, 2))   # latest detections, odom frame
+        self.obs_stamp  = None               # time of the latest detection msg
+        self.obs_warned = None
 
         self.use_rot    = self.get_parameter('rotational_field').value
         self.k_rot      = self.get_parameter('k_rot').value
@@ -136,6 +153,11 @@ class PotentialField2D(Node):
         self.odom_sub = self.create_subscription(
             Odometry, '/odom', self.odom_callback, qos)
 
+        if self.obs_source == 'lidar':
+            self.obs_sub = self.create_subscription(
+                PoseArray, self.get_parameter('obstacle_topic').value,
+                self.obstacles_callback, 10)
+
         self.timer = self.create_timer(0.1, self.control_loop)
 
         self._log_startup()
@@ -149,9 +171,13 @@ class PotentialField2D(Node):
         self.get_logger().info('=' * 58)
         self.get_logger().info(f'  Scenario   : {self.scenario}')
         self.get_logger().info(f'  Goal       : ({self.goal[0]}, {self.goal[1]}) m')
-        self.get_logger().info(f'  Obstacles  : {len(self.obstacles)}')
-        for i, o in enumerate(self.obstacles):
-            self.get_logger().info(f'     obs[{i}]  : ({o[0]:.2f}, {o[1]:.2f})')
+        if self.obs_source == 'lidar':
+            self.get_logger().info('  Obstacles  : LIVE from LiDAR '
+                                   f'({self.get_parameter("obstacle_topic").value})')
+        else:
+            self.get_logger().info(f'  Obstacles  : {len(self.obstacles)} (from YAML)')
+            for i, o in enumerate(self.obstacles):
+                self.get_logger().info(f'     obs[{i}]  : ({o[0]:.2f}, {o[1]:.2f})')
         self.get_logger().info(f'  k_att={self.k_att}  k_rep={self.k_rep}  d0={self.d0}')
         self.get_logger().info(f'  Rotational field: {self.use_rot}  (k_rot={self.k_rot})')
         self.get_logger().info('=' * 58)
@@ -187,6 +213,22 @@ class PotentialField2D(Node):
         yr = -s * dx + c * dy
         thr = self._wrap(yaw - self.th0)
         self.pose = np.array([xr, yr, thr])
+
+    def _to_start(self, po):
+        """Map a point from the odom frame into the START frame
+        (inverse of _to_odom). Used for live LiDAR detections."""
+        c, s = math.cos(self.th0), math.sin(self.th0)
+        dx, dy = po[0] - self.x0, po[1] - self.y0
+        return (c * dx + s * dy, -s * dx + c * dy)
+
+    def obstacles_callback(self, msg):
+        """Live obstacle list from pole_detector, published in the odom frame."""
+        pts = [(p.position.x, p.position.y) for p in msg.poses]
+        self.obs_odom = np.array(pts, dtype=float).reshape(-1, 2)
+        self.obs_stamp = self.get_clock().now()
+        if self.have_origin:
+            self.obstacles = np.array([self._to_start(p) for p in self.obs_odom],
+                                      dtype=float).reshape(-1, 2)
 
     def _to_odom(self, pf):
         """Map a point from the START frame back into the odom frame,
@@ -253,6 +295,19 @@ class PotentialField2D(Node):
 
         pos = self.pose[:2]
         theta = self.pose[2]
+
+        # live mode: refresh the start-frame obstacle list and watch for silence
+        if self.obs_source == 'lidar':
+            if self.obs_odom.size:
+                self.obstacles = np.array([self._to_start(p) for p in self.obs_odom],
+                                          dtype=float).reshape(-1, 2)
+            now = self.get_clock().now()
+            silent = (self.obs_stamp is None or
+                      (now - self.obs_stamp).nanoseconds / 1e9 > self.obs_timeout)
+            if silent and (self.obs_warned is None or
+                           (now - self.obs_warned).nanoseconds / 1e9 > 2.0):
+                self.get_logger().warn('  No obstacle message recently: is pole_detector running?')
+                self.obs_warned = now
         elapsed = (self.get_clock().now() - self.start_time).nanoseconds / 1e9
 
         dist_to_goal = np.linalg.norm(self.goal - pos)
@@ -520,7 +575,10 @@ def main(args=None):
     except KeyboardInterrupt:
         node.get_logger().info('Interrupted — stopping robot.')
     finally:
-        node.stop()
+        try:
+            node.stop()          # may fail harmlessly if Ctrl+C already shut ROS down
+        except Exception:
+            pass
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()

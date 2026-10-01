@@ -54,6 +54,28 @@ Visualization Manager:
         History Policy: Keep Last
       Namespaces:
         pf2d: true
+    - Class: rviz_default_plugins/LaserScan
+      Name: LaserScan
+      Enabled: true
+      Topic:
+        Value: /scan
+        Depth: 5
+        Reliability Policy: Best Effort
+        History Policy: Keep Last
+      Style: Flat Squares
+      Size (m): 0.03
+      Color Transformer: FlatColor
+      Color: 110; 110; 110
+      Alpha: 1
+      Decay Time: 0
+    - Class: rviz_default_plugins/MarkerArray
+      Name: DetectedPoles
+      Enabled: true
+      Topic:
+        Value: /pole_markers
+        Depth: 10
+        Reliability Policy: Reliable
+        History Policy: Keep Last
     - Class: rviz_default_plugins/Path
       Name: RobotPath
       Enabled: true

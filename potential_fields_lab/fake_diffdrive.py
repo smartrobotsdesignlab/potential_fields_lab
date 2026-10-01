@@ -31,7 +31,9 @@ from rclpy.node import Node
 
 from geometry_msgs.msg import Twist, TransformStamped
 from nav_msgs.msg import Odometry
-from tf2_ros import TransformBroadcaster
+from tf2_ros import TransformBroadcaster, StaticTransformBroadcaster
+from sensor_msgs.msg import LaserScan
+import random
 
 
 class FakeDiffDrive(Node):
@@ -41,6 +43,19 @@ class FakeDiffDrive(Node):
         # integration rate (Hz). 50 Hz is smooth and cheap.
         self.declare_parameter('rate', 50.0)
         self.rate = self.get_parameter('rate').value
+
+        # ---- optional simulated LDS-01 (Session 3) ----
+        # sim_poles : "x,y; x,y"  pole centres in the world/odom frame [m]
+        # sim_walls : "xmin,xmax,ymin,ymax"  rectangular room, "" for none
+        self.declare_parameter('sim_poles', '')
+        self.declare_parameter('sim_walls', '')
+        self.declare_parameter('sim_pole_radius', 0.05)
+        self.declare_parameter('sim_scan_noise', True)
+        self.poles = self._parse_pairs(self.get_parameter('sim_poles').value)
+        w = self.get_parameter('sim_walls').value.strip()
+        self.walls = [float(v) for v in w.split(',')] if w else None
+        self.pole_r = self.get_parameter('sim_pole_radius').value
+        self.scan_noise = self.get_parameter('sim_scan_noise').value
 
         # pose state, starts at the origin like a booted robot
         self.x = 0.0
@@ -58,6 +73,18 @@ class FakeDiffDrive(Node):
 
         self.last_time = self.get_clock().now()
         self.timer = self.create_timer(1.0 / self.rate, self.update)
+
+        if self.poles or self.walls:
+            self.scan_pub = self.create_publisher(LaserScan, '/scan', 10)
+            self.static_tf = StaticTransformBroadcaster(self)
+            st = TransformStamped()
+            st.header.stamp = self.get_clock().now().to_msg()
+            st.header.frame_id = 'base_footprint'; st.child_frame_id = 'base_scan'
+            st.transform.rotation.w = 1.0          # laser at the robot centre in sim
+            self.static_tf.sendTransform(st)
+            self.scan_timer = self.create_timer(0.2, self.publish_scan)   # 5 Hz like LDS-01
+            self.get_logger().info(f'Simulated LDS-01 ON: {len(self.poles)} poles, '
+                                   f'walls={self.walls}')
 
         self.get_logger().info(
             f'Fake diff-drive up. Integrating /cmd_vel -> /odom at '
@@ -106,6 +133,53 @@ class FakeDiffDrive(Node):
         t.transform.rotation.z = qz
         t.transform.rotation.w = qw
         self.tf_broadcaster.sendTransform(t)
+
+    @staticmethod
+    def _parse_pairs(txt):
+        out = []
+        for chunk in str(txt).split(';'):
+            chunk = chunk.strip()
+            if chunk:
+                x, y = chunk.split(',')
+                out.append((float(x), float(y)))
+        return out
+
+    def publish_scan(self):
+        """360 beams, 1 deg, ray-cast from the current pose against the poles
+        and walls. Noise ~ LDS-01 spec (sigma 5 mm < 0.5 m, 1.75 % beyond)."""
+        n = 360; inc = 2.0 * math.pi / n
+        ranges = []
+        for i in range(n):
+            a = self.theta + i * inc                    # beam direction in world
+            dx, dy = math.cos(a), math.sin(a)
+            best = float('inf')
+            for (cx, cy) in self.poles:
+                ox, oy = cx - self.x, cy - self.y
+                b = dx * ox + dy * oy
+                disc = b * b - (ox * ox + oy * oy - self.pole_r ** 2)
+                if disc >= 0:
+                    t = b - math.sqrt(disc)
+                    if 0 < t < best:
+                        best = t
+            if self.walls:
+                xmin, xmax, ymin, ymax = self.walls
+                for t in ((xmax - self.x) / dx if dx > 1e-9 else None,
+                          (xmin - self.x) / dx if dx < -1e-9 else None,
+                          (ymax - self.y) / dy if dy > 1e-9 else None,
+                          (ymin - self.y) / dy if dy < -1e-9 else None):
+                    if t is not None and 0 < t < best:
+                        best = t
+            if best < float('inf') and self.scan_noise:
+                best += random.gauss(0.0, 0.005 if best < 0.5 else 0.0175 * best)
+            if not (0.12 <= best <= 3.5):
+                best = float('inf')
+            ranges.append(best)
+        m = LaserScan()
+        m.header.stamp = self.get_clock().now().to_msg(); m.header.frame_id = 'base_scan'
+        m.angle_min = 0.0; m.angle_max = 2 * math.pi - inc; m.angle_increment = inc
+        m.time_increment = 0.0; m.scan_time = 0.2       # whole scan taken at one pose in sim
+        m.range_min = 0.12; m.range_max = 3.5; m.ranges = ranges
+        self.scan_pub.publish(m)
 
     @staticmethod
     def _wrap(angle):

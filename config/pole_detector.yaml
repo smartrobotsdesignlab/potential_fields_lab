@@ -1,0 +1,12 @@
+pole_detector:
+  ros__parameters:
+    pole_radius: 0.05        # 10 cm thermocol cylinder
+    max_range: 1.6           # >= 3 beams on the pole out to here
+    min_width: 0.05
+    max_width: 0.16
+    bg_gap: 0.15             # pole must stand >= 15 cm in front of its background
+    jump: 0.08
+    alpha: 0.3               # smoothing of the tracked position
+    confirm_hits: 3
+    drop_after: 1.5
+    beam_time_mode: "stamp"  # set after the spin test on the real LDS-01

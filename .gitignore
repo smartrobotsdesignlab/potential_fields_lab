@@ -5,3 +5,8 @@ log/
 __pycache__/
 *.pyc
 *.egg-info/
+*.db3
+*.zip
+s3_*/
+*.db3
+*.zip
