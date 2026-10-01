@@ -10,3 +10,10 @@ pole_detector:
     confirm_hits: 3
     drop_after: 1.5
     beam_time_mode: "stamp"  # set after the spin test on the real LDS-01
+    tf_wait: 0.25            # wait for the pose that matches the scan (Wi-Fi delay)
+    # Test arena in odom (the robot's start pose): only poles inside are used
+    roi_enable: true
+    roi_xmin: 0.3
+    roi_xmax: 1.6
+    roi_ymin: -0.5
+    roi_ymax: 0.5

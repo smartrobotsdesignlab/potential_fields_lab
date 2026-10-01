@@ -50,12 +50,18 @@ class PoleDetector(Node):
         P('jump', 0.08); P('min_points', 3); P('min_width', 0.05); P('max_width', 0.16); P('bg_gap', 0.15)
         P('assoc_dist', 0.25); P('alpha', 0.3); P('confirm_hits', 3); P('drop_after', 1.5)
         P('beam_time_mode', 'stamp')
+        P('tf_wait', 0.05)        # s to wait for the pose matching each scan
+        # Test arena in the fixed frame: poles outside this box are ignored
+        # (chairs and desks in the office). Disabled by default.
+        P('roi_enable', False)
+        P('roi_xmin', -10.0); P('roi_xmax', 10.0); P('roi_ymin', -10.0); P('roi_ymax', 10.0)
         g = lambda k: self.get_parameter(k).value
         self.fixed = g('fixed_frame'); self.mode = g('beam_time_mode')
         self.params = dict(pole_radius=g('pole_radius'), min_range=g('min_range'),
                            max_range=g('max_range'), jump=g('jump'), min_points=g('min_points'),
                            min_width=g('min_width'), max_width=g('max_width'), bg_gap=g('bg_gap'))
-        self.R = g('pole_radius')
+        self.R = g('pole_radius'); self.tf_wait = g('tf_wait')
+        self.roi = (g('roi_xmin'), g('roi_xmax'), g('roi_ymin'), g('roi_ymax')) if g('roi_enable') else None
         self.tracker = PoleTracker(g('assoc_dist'), g('alpha'), g('confirm_hits'), g('drop_after'))
 
         self.tf_buffer = tf2_ros.Buffer(cache_time=Duration(seconds=5.0))
@@ -68,7 +74,8 @@ class PoleDetector(Node):
         self.mpub = self.create_publisher(MarkerArray, '/pole_markers', 10)
         self.n_scans = 0; self.n_fallback = 0; self.n_dets = 0; self.gaps = []; self.last_log = self.get_clock().now()
         self.get_logger().info(f'pole_detector up: r={self.R} m, range<{self.params["max_range"]} m, '
-                               f'beam_time_mode={self.mode}')
+                               f'beam_time_mode={self.mode}, tf_wait={self.tf_wait} s, '
+                               f'arena={"off" if self.roi is None else self.roi}')
 
     # -------- TF: laser frame -> fixed frame at a given time --------
     def lookup(self, laser_frame, t):
@@ -77,7 +84,7 @@ class PoleDetector(Node):
         newest pose and return the time gap, which is what decides the error."""
         try:
             return self.tf_buffer.lookup_transform(self.fixed, laser_frame, t,
-                                                   timeout=Duration(seconds=0.05)), 0.0
+                                                   timeout=Duration(seconds=self.tf_wait)), 0.0
         except Exception:
             try:
                 tf = self.tf_buffer.lookup_transform(self.fixed, laser_frame, Time())
@@ -109,7 +116,10 @@ class PoleDetector(Node):
                 self.n_fallback += 1; self.gaps.append(gap)
             tr = tf.transform.translation; yaw = quat_to_yaw(tf.transform.rotation)
             c, s = math.cos(yaw), math.sin(yaw)
-            pts.append((tr.x + c * d['x'] - s * d['y'], tr.y + s * d['x'] + c * d['y']))
+            px, py = tr.x + c * d['x'] - s * d['y'], tr.y + s * d['x'] + c * d['y']
+            if self.roi and not (self.roi[0] <= px <= self.roi[1] and self.roi[2] <= py <= self.roi[3]):
+                continue
+            pts.append((px, py))
         now_s = self.get_clock().now().nanoseconds / 1e9
         poles = self.tracker.update(pts, now_s)
         self.publish(poles, msg)
