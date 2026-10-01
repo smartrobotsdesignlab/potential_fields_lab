@@ -1,0 +1,19 @@
+potential_field_2d:
+  ros__parameters:
+    scenario_name: "scenario3_canyon"
+    k_att: 1.0
+    k_rep: 0.5
+    influence_radius: 0.55
+    goal_x: 2.5
+    goal_y: 0.0
+    goal_tolerance: 0.15
+    # U-shaped wall: a back row at x=1.5 plus two side rows -> true basin.
+    # goal sits BEHIND the wall, so the robot drives in and gets trapped.
+    obstacles: [1.5, -0.4,  1.5, -0.2,  1.5, 0.0,  1.5, 0.2,  1.5, 0.4,
+                1.3,  0.5,  1.1,  0.5,  0.9, 0.5,
+                1.3, -0.5,  1.1, -0.5,  0.9, -0.5]
+    rotational_field: false
+    k_rot: 0.5
+    max_lin_speed: 0.15
+    max_ang_speed: 1.0
+    heading_gain: 1.5

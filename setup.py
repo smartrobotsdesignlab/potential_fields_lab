@@ -22,6 +22,7 @@ setup(
     entry_points={
         'console_scripts': [
             'potential_field_1d = potential_fields_lab.potential_field_1d:main',
+            'potential_field_2d = potential_fields_lab.potential_field_2d:main',
             'pf_logger = potential_fields_lab.pf_logger:main',
         ],
     },
