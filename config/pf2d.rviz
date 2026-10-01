@@ -54,6 +54,20 @@ Visualization Manager:
         History Policy: Keep Last
       Namespaces:
         pf2d: true
+    - Class: rviz_default_plugins/Path
+      Name: RobotPath
+      Enabled: true
+      Topic:
+        Value: /pf2d_path
+        Depth: 10
+        Reliability Policy: Reliable
+        History Policy: Keep Last
+      Color: 31; 158; 137
+      Alpha: 1
+      Line Style: Lines
+      Line Width: 0.03
+      Buffer Length: 1
+      Pose Style: None
   Global Options:
     Fixed Frame: odom
     Background Color: 255; 255; 255

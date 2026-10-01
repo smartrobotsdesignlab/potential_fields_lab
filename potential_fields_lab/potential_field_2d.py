@@ -26,8 +26,8 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 import numpy as np
 import math
 
-from nav_msgs.msg import Odometry
-from geometry_msgs.msg import Twist, Point
+from nav_msgs.msg import Odometry, Path
+from geometry_msgs.msg import Twist, Point, PoseStamped
 from std_msgs.msg import Float32MultiArray, String
 from visualization_msgs.msg import Marker, MarkerArray
 import json
@@ -108,6 +108,7 @@ class PotentialField2D(Node):
         self.y0 = 0.0
         self.th0 = 0.0
         self.raw_pos = np.zeros(2)  # latest raw odom position (for markers)
+        self.raw_yaw = 0.0          # latest raw odom heading (for the path)
 
         # ============================================================
         #   ROS INTERFACE
@@ -121,9 +122,14 @@ class PotentialField2D(Node):
         self.debug_pub = self.create_publisher(Float32MultiArray, '/pf2d_debug', 10)
         self.status_pub= self.create_publisher(String,            '/pf2d_status',10)
         self.marker_pub= self.create_publisher(MarkerArray,       '/pf2d_markers',10)
+        self.path_pub  = self.create_publisher(Path,              '/pf2d_path',  10)
 
         # frame the markers live in (odom, same as the pose we read)
         self.frame_id  = 'odom'
+
+        # continuous trajectory trace, grows as the robot drives
+        self.path_msg = Path()
+        self.path_msg.header.frame_id = self.frame_id
 
         # /odom on TB3 is reliable by default, but BEST_EFFORT sub is
         # compatible with both a reliable and a best-effort publisher.
@@ -171,6 +177,7 @@ class PotentialField2D(Node):
                 f'{math.degrees(yaw):.0f} deg). Field frame starts here.')
 
         self.raw_pos = np.array([p.x, p.y])
+        self.raw_yaw = yaw
 
         # express the pose in the START frame: translate by the origin,
         # then rotate by -th0 so the initial heading is +x
@@ -349,6 +356,31 @@ class PotentialField2D(Node):
         self.status_pub.publish(s)
 
         self._publish_markers(pos, force)
+        self._publish_path()
+
+    def _publish_path(self):
+        """Grow a nav_msgs/Path with the robot's odom pose, so RViz can draw
+        one continuous line. A new point is added only after ~1 cm of motion,
+        which keeps the message small and leaves a visible scribble wherever
+        the robot stalls."""
+        stamp = self.get_clock().now().to_msg()
+        add = not self.path_msg.poses
+        if not add:
+            last = self.path_msg.poses[-1].pose.position
+            if math.hypot(self.raw_pos[0] - last.x,
+                          self.raw_pos[1] - last.y) > 0.01:
+                add = True
+        if add:
+            ps = PoseStamped()
+            ps.header.frame_id = self.frame_id
+            ps.header.stamp = stamp
+            ps.pose.position.x = float(self.raw_pos[0])
+            ps.pose.position.y = float(self.raw_pos[1])
+            ps.pose.orientation.z = math.sin(self.raw_yaw / 2.0)
+            ps.pose.orientation.w = math.cos(self.raw_yaw / 2.0)
+            self.path_msg.poses.append(ps)
+        self.path_msg.header.stamp = stamp
+        self.path_pub.publish(self.path_msg)
 
     def _publish_markers(self, pos, force):
         """RViz visuals in the odom frame: goal, obstacles, each obstacle's
